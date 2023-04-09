@@ -70,7 +70,7 @@ def train():
                 dynasent_r2['train']['gold_label'] + \
                 sst['train']['gold_label']
 
-    # finetune on r1
+    # finetune on comb data
     _ = bert_finetune.fit(
         X_train,
         Y_train)
