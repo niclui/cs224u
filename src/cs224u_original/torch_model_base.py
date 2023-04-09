@@ -4,6 +4,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 from . import utils
 
 __author__ = "Christopher Potts"
@@ -346,7 +347,7 @@ class TorchModelBase:
 
             epoch_error = 0.0
 
-            for batch_num, batch in enumerate(dataloader, start=1):
+            for batch_num, batch in enumerate(tqdm(dataloader)):
 
                 batch = [x.to(self.device) for x in batch]
 
