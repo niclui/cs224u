@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import transformers
 from transformers import AutoModel, AutoTokenizer
+import wandb
+import os
 
 from src.a1_code.a1_processing import convert_sst_label, get_batch_token_ids, BertClassifierModule
 from src.cs224u_original.torch_shallow_neural_classifier import TorchShallowNeuralClassifier
@@ -47,10 +49,11 @@ class BertClassifier(TorchShallowNeuralClassifier):
                 data['input_ids'], data['attention_mask'], y)
         return dataset
 
-def train():
-    # configure params here
-    weights_name = "prajjwal1/bert-mini"
-
+def train(weights_name):
+    # initialize wandb
+    wandb.init(entity=os.getenv("helengu"), 
+               project=os.getenv("bakeoff1-nlu"))
+    
     # set params
     bert_finetune = BertClassifier(
     weights_name=weights_name,
@@ -75,8 +78,15 @@ def train():
         X_train,
         Y_train)
 
-    # save best model
-    fn = "a1_bakeoff_" + weights_name
-    torch.save(bert_finetune.model, fn + ".pt")
+    # save dir
+    save_dir = "checkpoints/a1_bakeoff/"
+    if not os.path.exists(save_dir):
+            os.makedirs(save_dir)        
 
-train()
+    # save best model
+    save_name = weights_name.split('/')[-1]
+    save_path = os.path.join(save_dir, save_name)
+    torch.save(bert_finetune.model, save_path + ".pt")
+    
+
+train("prajjwal1/bert-mini")

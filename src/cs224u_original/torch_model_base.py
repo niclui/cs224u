@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 from . import utils
+import wandb
+from sklearn.metrics import f1_score, accuracy_score
 
 __author__ = "Christopher Potts"
 __version__ = "CS224u, Stanford, Spring 2023"
@@ -364,6 +366,12 @@ class TorchModelBase:
                 err.backward()
 
                 epoch_error += err.item()
+                
+                # logging metrics
+                wandb.log({"loss": err.item()})
+                
+                # "accuracy": accuracy_score(y_batch, batch_preds),
+                #            "macro f1": f1_score(y_batch, batch_preds, average='macro')
 
                 if batch_num % self.gradient_accumulation_steps == 0 or \
                   batch_num == len(dataloader):
@@ -372,7 +380,7 @@ class TorchModelBase:
                             self.model.parameters(), self.max_grad_norm)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
-
+            
             # Stopping criteria:
 
             if self.early_stopping:
