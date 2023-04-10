@@ -1,3 +1,4 @@
+from src.a1_code.args import get_train_test_args
 from collections import defaultdict, Counter
 from datasets import load_dataset
 import pandas as pd
@@ -49,17 +50,19 @@ class BertClassifier(TorchShallowNeuralClassifier):
                 data['input_ids'], data['attention_mask'], y)
         return dataset
 
-def train(weights_name):
+def train():
+    args = get_train_test_args()
+    model_name = args.model
     # initialize wandb
     wandb.init(entity=os.getenv("helengu"), 
                project=os.getenv("bakeoff1-nlu"))
     
     # set params
     bert_finetune = BertClassifier(
-    weights_name=weights_name,
+    weights_name=model_name,
     hidden_activation=nn.ReLU(),
     eta=0.00005,          # Low learning rate for effective fine-tuning.
-    batch_size=8,         # Small batches to avoid memory overload.
+    batch_size=64,         # Small batches to avoid memory overload.
     gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
     early_stopping=True,  # Early-stopping
     n_iter_no_change=5)   # params.
@@ -84,9 +87,14 @@ def train(weights_name):
             os.makedirs(save_dir)        
 
     # save best model
-    save_name = weights_name.split('/')[-1]
+    save_name = model_name.split('/')[-1]
     save_path = os.path.join(save_dir, save_name)
     torch.save(bert_finetune.model, save_path + ".pt")
-    
 
-train("prajjwal1/bert-mini")
+# python a1_train.py --model "roberta-base"
+if __name__ == '__main__':
+    train()
+
+# train("prajjwal1/bert-mini")
+# train("roberta-base")
+# train("microsoft/deberta-v3-base")
