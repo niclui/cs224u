@@ -10,6 +10,7 @@ import transformers
 from transformers import AutoModel, AutoTokenizer
 import wandb
 import os
+from sklearn.metrics import classification_report
 
 from src.a1_code.a1_processing import convert_sst_label, get_batch_token_ids, BertClassifierModule
 from src.cs224u_original.torch_shallow_neural_classifier import TorchShallowNeuralClassifier
@@ -25,21 +26,26 @@ for splitname in ('train', 'validation', 'test'):
 
 # model
 class BertClassifier(TorchShallowNeuralClassifier):
-    def __init__(self, weights_name, *args, **kwargs):
+    def __init__(self, weights_name, model=None, *args, **kwargs):
         self.weights_name = weights_name
         self.tokenizer = AutoTokenizer.from_pretrained(self.weights_name)
         super().__init__(*args, **kwargs)
         self.params += ['weights_name']
+        self.model = model
 
     def build_graph(self):
-        return BertClassifierModule(
-            self.n_classes_, self.hidden_activation, self.weights_name)
+        if self.model is None:
+            return BertClassifierModule(
+                self.n_classes_, self.hidden_activation, self.weights_name)
+        else:
+            return self.model
 
     def build_dataset(self, X, y=None):
         data = get_batch_token_ids(X, self.tokenizer)
         if y is None:
             dataset = torch.utils.data.TensorDataset(
                 data['input_ids'], data['attention_mask'])
+            self.classes_ = ['negative', 'neutral', 'positive']
         else:
             self.classes_ = sorted(set(y))
             self.n_classes_ = len(self.classes_)
@@ -51,18 +57,16 @@ class BertClassifier(TorchShallowNeuralClassifier):
         return dataset
 
 def train():
-    args = get_train_test_args()
-    model_name = args.model
     # initialize wandb
     wandb.init(entity=os.getenv("helengu"), 
                project=os.getenv("bakeoff1-nlu"))
     
     # set params
     bert_finetune = BertClassifier(
-    weights_name=model_name,
+    weights_name=args.model,
     hidden_activation=nn.ReLU(),
-    eta=0.00005,          # Low learning rate for effective fine-tuning.
-    batch_size=64,         # Small batches to avoid memory overload.
+    eta=args.lr,          # Low learning rate for effective fine-tuning.
+    batch_size=8,         # Small batches to avoid memory overload.
     gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
     early_stopping=True,  # Early-stopping
     n_iter_no_change=5)   # params.
@@ -87,13 +91,52 @@ def train():
             os.makedirs(save_dir)        
 
     # save best model
-    save_name = model_name.split('/')[-1]
+    save_name = args.model.split('/')[-1]
     save_path = os.path.join(save_dir, save_name)
     torch.save(bert_finetune.model, save_path + ".pt")
+    
+def predict():
+    finetuned = BertClassifier(
+    weights_name=args.model,
+    model = torch.load(args.checkpoint),
+    hidden_activation=nn.ReLU(),
+    eta=args.lr,          # Low learning rate for effective fine-tuning.
+    batch_size=8,         # Small batches to avoid memory overload.
+    gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
+    early_stopping=True,  # Early-stopping
+    n_iter_no_change=5)   # params.
+
+    bakeoff_df = pd.read_csv(args.val_data)
+    preds = finetuned.predict(bakeoff_df['sentence'])
+    bakeoff_df['prediction'] = preds 
+    bakeoff_df.to_csv(args.pred_file)
+    
+def eval():
+
+    finetuned = BertClassifier(
+    weights_name=args.model,
+    model = torch.load(args.checkpoint),
+    hidden_activation=nn.ReLU(),
+    eta=args.lr,          # Low learning rate for effective fine-tuning.
+    batch_size=8,         # Small batches to avoid memory overload.
+    gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
+    early_stopping=True,  # Early-stopping
+    n_iter_no_change=5)   # params.
+
+    for val_set in [dynasent_r1, dynasent_r1, sst]:
+        preds = finetuned.predict(val_set['validation']['sentence'])
+        print(classification_report(val_set['validation']['gold_label'], preds, digits=3))
+
 
 # python a1_train.py --model "roberta-base"
 if __name__ == '__main__':
-    train()
+    args = get_train_test_args()
+    if args.mode == 'train':
+        train()
+    elif args.mode == 'predict':
+        predict()
+    elif args.mode == 'eval':
+        eval()
 
 # train("prajjwal1/bert-mini")
 # train("roberta-base")
