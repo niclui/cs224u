@@ -8,6 +8,7 @@ from tqdm import tqdm
 from . import utils
 import wandb
 from sklearn.metrics import f1_score, accuracy_score
+import os 
 
 __author__ = "Christopher Potts"
 __version__ = "CS224u, Stanford, Spring 2023"
@@ -23,13 +24,14 @@ class TorchModelBase:
             gradient_accumulation_steps=1,
             max_grad_norm=None,
             warm_start=False,
-            early_stopping=False,
+            early_stopping=True,
             validation_fraction=0.1,
             shuffle_train=True,
             n_iter_no_change=10,
             tol=1e-5,
             device=None,
             display_progress=True,
+            save_path = None,
             **optimizer_kwargs):
         """
         Base class for all the PyTorch-based models.
@@ -170,6 +172,7 @@ class TorchModelBase:
             'warm_start',
             'tol']
         self.params += list(optimizer_kwargs.keys())
+        self.save_path = save_path
 
     def build_dataset(self, *args, **kwargs):
         """
@@ -506,6 +509,7 @@ class TorchModelBase:
 
         """
         score = self.score(*dev)
+        print(score)
         self.validation_scores.append(score)
         # If the score isn't at least `self.tol` better, increment:
         if score < (self.best_score + self.tol):
@@ -515,6 +519,7 @@ class TorchModelBase:
         # If the current score is numerically better than all previous
         # scores, update the best parameters:
         if score > self.best_score:
+            self.to_pickle(self.save_path)
             self.best_parameters = copy.deepcopy(self.model.state_dict())
             self.best_score = score
         self.model.train()

@@ -46,7 +46,7 @@ class BertClassifierModule(nn.Module):
 
     def forward(self, indices, mask):
         out = self.bert(indices, mask)
-        pooled = torch.mean(out["last_hidden_state"], dim=1)
+        pooled = torch.sum(out["last_hidden_state"], dim=1)
         #logits = self.classifier_layer(out["last_hidden_state"][:,0,:])
         logits = self.classifier_layer(pooled)
         return logits

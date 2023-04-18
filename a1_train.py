@@ -61,15 +61,23 @@ def train():
     wandb.init(entity=os.getenv("helengu"), 
                project=os.getenv("bakeoff1-nlu"))
     
+    # save dir
+    save_dir = "checkpoints/a1_bakeoff/"
+    if not os.path.exists(save_dir):
+            os.makedirs(save_dir)        
+    save_name = args.model.split('/')[-1]
+    save_path = os.path.join(save_dir, save_name)
+    
     # set params
     bert_finetune = BertClassifier(
     weights_name=args.model,
     hidden_activation=nn.ReLU(),
     eta=args.lr,          # Low learning rate for effective fine-tuning.
-    batch_size=8,         # Small batches to avoid memory overload.
+    batch_size=32,         # Small batches to avoid memory overload.
     gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
     early_stopping=True,  # Early-stopping
-    n_iter_no_change=5)   # params.
+    n_iter_no_change=5,
+    save_path=save_path) # the checkpoint path
 
     # combine data
     X_train = dynasent_r1['train']['sentence'] + \
@@ -85,13 +93,9 @@ def train():
         X_train,
         Y_train)
 
-    # save dir
-    save_dir = "checkpoints/a1_bakeoff/"
-    if not os.path.exists(save_dir):
-            os.makedirs(save_dir)        
+    
 
     # save best model
-    save_name = args.model.split('/')[-1]
     save_path = os.path.join(save_dir, save_name)
     torch.save(bert_finetune.model, save_path + ".pt")
     
@@ -107,9 +111,9 @@ def predict():
     n_iter_no_change=5)   # params.
 
     bakeoff_df = pd.read_csv(args.val_data)
-    preds = finetuned.predict(bakeoff_df['sentence'])
+    preds = finetuned.predict(bakeoff_df['sentence'].tolist())
     bakeoff_df['prediction'] = preds 
-    bakeoff_df.to_csv(args.pred_file)
+    bakeoff_df.to_csv(args.pred_file, index=False)
     
 def eval():
 
