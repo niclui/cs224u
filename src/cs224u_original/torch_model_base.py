@@ -519,7 +519,7 @@ class TorchModelBase:
         # If the current score is numerically better than all previous
         # scores, update the best parameters:
         if score > self.best_score:
-            #self.to_pickle(self.save_path)
+            self.to_pickle(self.save_path)
             self.best_parameters = copy.deepcopy(self.model.state_dict())
             self.best_score = score
         self.model.train()
@@ -644,6 +644,7 @@ class TorchModelBase:
         self.model = self.model.cpu()
         with open(output_filename, 'wb') as f:
             pickle.dump(self, f)
+        self.model.to(self.device)
 
     @staticmethod
     def from_pickle(src_filename):
