@@ -11,9 +11,11 @@ from transformers import AutoModel, AutoTokenizer
 import wandb
 import os
 from sklearn.metrics import classification_report
+import json
 
 from src.a1_code.a1_processing import convert_sst_label, get_batch_token_ids, BertClassifierModule
 from src.cs224u_original.torch_shallow_neural_classifier import TorchShallowNeuralClassifier
+
 
 # data
 dynasent_r1 = load_dataset("dynabench/dynasent", 'dynabench.dynasent.r1.all')
@@ -23,6 +25,11 @@ for splitname in ('train', 'validation', 'test'):
     dist = [convert_sst_label(s) for s in sst[splitname]['label_text']]
     sst[splitname] = sst[splitname].add_column('gold_label', dist)
     sst[splitname] = sst[splitname].add_column('sentence', sst[splitname]['text'])
+
+# load prompting data
+easy_zero = open("datasets/combined_zeroshot.json")
+hard_zero = open("datasets/combined_hard_zeroshot.json")
+fewshot = open("datasets/combined_fewshot.json")
 
 # model
 class BertClassifier(TorchShallowNeuralClassifier):
@@ -66,6 +73,8 @@ def train():
     if not os.path.exists(save_dir):
             os.makedirs(save_dir)        
     save_name = args.model.split('/')[-1]
+    save_name += "_" + args.prompting
+    print(save_name)
     save_path = os.path.join(save_dir, save_name)
     
     # set params
@@ -73,27 +82,46 @@ def train():
     weights_name=args.model,
     hidden_activation=nn.ReLU(),
     eta=args.lr,          # Low learning rate for effective fine-tuning.
-    batch_size=32,         # Small batches to avoid memory overload.
-    gradient_accumulation_steps=4,  # Increase the effective batch size to 32.
+    batch_size=16,         # Small batches to avoid memory overload.
+    gradient_accumulation_steps=4,  # Increase the effective batch size to 64.
     early_stopping=True,  # Early-stopping
     n_iter_no_change=5,
     save_path=save_path) # the checkpoint path
 
-    # combine data
-    X_train = dynasent_r1['train']['sentence'] + \
-                dynasent_r2['train']['sentence'] + \
-                sst['train']['sentence']
+    if args.prompting == "r2":
+        print("r2")
+        X_train = dynasent_r2["train"]["sentence"][:500]
+        Y_train = dynasent_r2["train"]['gold_label'][:500]
+    else:
+        if args.prompting == "easy_zero":
+            dataset = easy_zero
+            print("easy zero")
+        elif args.prompting == "hard_zero":
+            dataset = hard_zero
+            print("hard zero")
+        elif args.prompting == "fewshot":
+            dataset = fewshot
+            print("fewshot")
 
-    Y_train = dynasent_r1['train']['gold_label'] + \
-                dynasent_r2['train']['gold_label'] + \
-                sst['train']['gold_label']
+        X_train = []
+        Y_train = []
+        dataset = json.load(dataset)
+
+        if len(dataset)>500:
+            dataset=dataset[:500]
+        
+        for data in dataset:
+            X_train.append(data['sentence'])
+            Y_train.append(data['label'])
+
+    # X_train = dataset['sentence']
+
+    # Y_train = dataset['label']
 
     # finetune on comb data
     _ = bert_finetune.fit(
         X_train,
         Y_train)
-
-    
 
     # save best model
     save_path = os.path.join(save_dir, save_name)
@@ -127,7 +155,7 @@ def eval():
     early_stopping=True,  # Early-stopping
     n_iter_no_change=5)   # params.
 
-    for val_set in [dynasent_r1, dynasent_r1, sst]:
+    for val_set in [dynasent_r2, dynasent_r1, dynasent_r1, sst]:
         preds = finetuned.predict(val_set['validation']['sentence'])
         print(classification_report(val_set['validation']['gold_label'], preds, digits=3))
 
